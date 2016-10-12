@@ -1,6 +1,6 @@
 --[[
 
-Copyright 2012 The Luvit Authors. All Rights Reserved.
+Copyright 2014 The Luvit Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,110 +16,117 @@ limitations under the License.
 
 --]]
 
-require("helper")
-
 local dns = require('dns')
-local net = require('net')
+local jit = require('jit')
+local path = require('luvi').path
 
-dns.resolve4('luvit.io', function(err, addresses)
-  assert(type(err) == 'nil')
-  assert(type(addresses) == 'table')
-  assert(#addresses > 0)
+-- Appveyor is failing builds randomly... need to re-enable
+if require('os').getenv('APPVEYOR') then return end
+
+require('tap')(function (test)
+  test("resolve4", function (expect)
+    dns.resolve4('luvit.io', expect(function(err, answers)
+      assert(not err)
+      assert(#answers > 0)
+      p(answers)
+    end))
+  end)
+  test("resolve6", function (expect)
+    dns.resolve6('luvit.io', expect(function(err, answers)
+      assert(not err)
+      p(answers)
+      assert(#answers > 0)
+    end))
+  end)
+  test("resolve6", function (expect)
+    dns.resolve6('luvit.io', expect(function(err, answers)
+      assert(not err)
+      p(answers)
+      assert(#answers > 0)
+    end))
+  end)
+  test("resolveSrv", function (expect)
+    dns.resolveSrv('_https._tcp.luvit.io', expect(function(err, answers)
+      assert(not err)
+      p(answers)
+      assert(#answers > 0)
+    end))
+  end)
+  test("resolveMx", function (expect)
+    dns.resolveMx('luvit.io', expect(function(err, answers)
+      assert(not err)
+      p(answers)
+      assert(#answers > 0)
+    end))
+  end)
+  test("resolveNs", function (expect)
+    dns.resolveNs('luvit.io', expect(function(err, answers)
+      assert(not err)
+      p(answers)
+      assert(#answers > 0)
+    end))
+  end)
+  test("resolveCname", function (expect)
+    dns.resolveCname('try.luvit.io', expect(function(err, answers)
+      assert(not err)
+      p(answers)
+      assert(#answers > 0)
+    end))
+  end)
+  test("resolveTxt", function (expect)
+    dns.resolveTxt('google._domainkey.luvit.io', expect(function(err, answers)
+      assert(not err)
+      p(answers)
+      assert(#answers > 0)
+    end))
+  end)
+  test("resolveTxtTimeout Order", function (expect)
+    dns.setServers( { { ['host'] = '127.0.0.1', ['port'] = 53234 }, { ['host'] = '8.8.8.8', ['port'] = 53 } })
+    dns.setTimeout(200)
+    dns.resolveTxt('google._domainkey.luvit.io', expect(function(err, answers)
+      assert(not err)
+      p(answers)
+      assert(#answers > 0)
+      assert(answers[1].server.host == '8.8.8.8')
+    end))
+  end)
+  test("resolveTxtTimeout", function (expect)
+    dns.setServers( { { ['host'] = '127.0.0.1', ['port'] = 53234 } } )
+    dns.setTimeout(200)
+    dns.resolveTxt('google._domainkey.luvit.io', expect(function(err, answers)
+      assert(err)
+    end))
+  end)
+  test("resolveTxtTCP", function (expect)
+    dns.setTimeout(2000)
+    dns.setServers( { { ['host'] = '8.8.8.8', ['port'] = 53, ['tcp'] = true } } )
+    dns.resolveTxt('google._domainkey.luvit.io', expect(function(err, answers)
+      assert(not err)
+    end))
+  end)
+  test("load resolver", function ()
+    if jit.os == 'Windows' then
+      return
+    end
+    local servers = dns.loadResolver({ file = path.join(module.dir, 'fixtures', 'resolve.conf.a')})
+    assert(#servers == 3)
+    assert(servers[1].host == '192.168.0.1')
+    assert(servers[2].host == '::1')
+    assert(servers[3].host == '::2')
+    dns.setDefaultServers()
+  end)
+  test("load resolver (resolv.conf search)", function ()
+    if jit.os == 'Windows' then return end
+    local servers = dns.loadResolver({ file = path.join(module.dir, 'fixtures', 'resolve.conf.b')})
+    assert(#servers == 2)
+    assert(servers[1].host == '127.0.0.1')
+    assert(servers[2].host == '127.0.0.2')
+    dns.setDefaultServers()
+  end)
+  test('bad address', function(expect)
+    dns.resolve4('luvit.not_a_domain', expect(function(err)
+      assert(err)
+      assert(err.code > 0)
+    end))
+  end)
 end)
-
-dns.resolve6('ipv6.google.com', function(err, addresses)
-  assert(type(err) == 'nil')
-  assert(type(addresses) == 'table')
-  assert(#addresses > 0)
-end)
-
-dns.lookup('google.com', function(err, addresses)
-  assert(type(err) == 'nil')
-  assert(type(addresses) == 'string')
-end)
-
-dns.reverse('8.8.8.8', function(err, addresses)
-  assert(type(err) == 'nil')
-  assert(type(addresses) == 'table')
-  for i=1,#addresses do
-    assert(type(addresses[i]) == 'string')
-  end
-end)
-
-dns.reverse('2001:4860:4860::8888', function(err, addresses)
-  assert(type(err) == 'nil')
-  assert(type(addresses) == 'table')
-  for i=1,#addresses do
-    assert(type(addresses[i]) == 'string')
-  end
-end)
-
-dns.reverse('bogus ip', function(err, addresses)
-  assert(type(err) ~= 'nil')
-  assert(type(addresses) == 'nil')
-end)
-
-dns.resolveMx('luvit.io', function(err, addresses)
-  assert(type(err) == 'nil')
-  assert(type(addresses) == 'table')
-  for i=1,#addresses do
-    assert(addresses[i].priority)
-    assert(addresses[i].exchange)
-  end
-end)
-
-dns.resolveNs('luvit.io', function(err, addresses)
-  assert(type(err) == 'nil')
-  assert(type(addresses) == 'table')
-  for i=1,#addresses do
-    assert(type(addresses[i]) == 'string')
-  end
-end)
-
-dns.resolveSrv('_jabber._tcp.google.com', function(err, addresses)
-  assert(type(err) == 'nil')
-  assert(type(addresses) == 'table')
-  for i=1,#addresses do
-    assert(type(addresses[i].name) == 'string')
-    assert(type(addresses[i].port) == 'number')
-    assert(type(addresses[i].priority) == 'number')
-    assert(type(addresses[i].weight) == 'number')
-  end
-end)
-
-dns.resolveCname('api.luvit.io', function(err, names)
-  assert(type(err) == 'nil')
-  assert(type(names) == 'table')
-  assert(#names == 1)
-end)
-
-dns.resolveTxt('google.com', function(err, records)
-  assert(type(err) == 'nil')
-  assert(type(records) == 'table')
-  for i=1,#records do
-    assert(type(records[i]) == 'string')
-  end
-end)
-
-dns.lookup('::1', function(err, ip, family)
-  assert(type(err) == 'nil')
-  assert(type(ip) == 'string')
-  assert(type(family) == 'number')
-end)
-
-assert(net.isIP('127.0.0.1') == 4)
-assert(net.isIP('::1') == 6)
-assert(net.isIP('bogus_ip') == 0)
-assert(net.isIPv4('127.0.0.1') == 4)
-assert(net.isIPv4('::1') == 0)
-assert(net.isIPv6('127.0.0.1') == 0)
-assert(net.isIPv6('::1') == 6)
-
--- Test the deprecated function prototypes
-assert(dns.isIP('127.0.0.1') == 4)
-assert(dns.isIP('::1') == 6)
-assert(dns.isIP('bogus_ip') == 0)
-assert(dns.isIPv4('127.0.0.1') == 4)
-assert(dns.isIPv4('::1') == 0)
-assert(dns.isIPv6('127.0.0.1') == 0)
-assert(dns.isIPv6('::1') == 6)

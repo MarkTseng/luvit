@@ -1,5 +1,5 @@
 --[[
-Copyright 2012 The Luvit Authors. All Rights Reserved.
+Copyright 2014 The Luvit Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,14 +13,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ]]--
-require('helper')
-local fixture = require('./fixture-tls')
-local fs = require('fs')
+
 local childprocess = require('childprocess')
+local los = require('los')
+local fs = require('fs')
+local path = require('luvi').path
 local table = require('table')
 local tls = require('tls')
+local utils = require('utils')
 
-if require('os').type() == 'win32' then
+if require('los').type() == 'win32' then
   return
 end
 
@@ -34,101 +36,45 @@ end
  - accepted and "authorized".
 ]]--
 
-local testCases = {
-  {
-    title = 'Do not request certs. Everyone is unauthorized.',
-    requestCert = false,
-    rejectUnauthorized = false,
-    CAs = {'ca1-cert'},
-    clients = {
-      { name = 'agent1', shouldReject = false, shouldAuth = false },
-      { name = 'agent2', shouldReject = false, shouldAuth = false },
-      { name = 'agent3', shouldReject = false, shouldAuth = false },
-      { name = 'nocert', shouldReject = false, shouldAuth = false }
-    }
-  },
-  {
-    title = 'Allow both authed and unauthed connections with CA1',
-    requestCert = true,
-    rejectUnauthorized = false,
-    CAs = {'ca1-cert'},
-    clients = {
-      { name = 'agent1', shouldReject = false, shouldAuth = true },
-      { name = 'agent2', shouldReject = false, shouldAuth = false },
-      { name = 'agent3', shouldReject = false, shouldAuth = false },
-      { name = 'nocert', shouldReject = false, shouldAuth = false }
-    },
-    {
-      title = 'Allow only authed connections with CA1',
-      requestCert = true,
-      rejectUnauthorized = true,
-      CAs = {'ca1-cert'},
-      clients = {
-        { name = 'agent1', shouldReject = false, shouldAuth = true },
-        { name = 'agent2', shouldReject = true },
-        { name = 'agent3', shouldReject = true },
-        { name = 'nocert', shouldReject = true }
-      }
-    }
-  },
-  {
-    title = 'Allow only authed connections with CA1 and CA2',
-    requestCert = true,
-    rejectUnauthorized = true,
-    CAs = {'ca1-cert', 'ca2-cert'},
-    clients = {
-      { name = 'agent1', shouldReject = false, shouldAuth = true },
-      { name = 'agent2', shouldReject = true },
-      { name = 'agent3', shouldReject = false, shouldAuth = true },
-      { name = 'nocert', shouldReject = true }
-    }
-  },
-  {
-    title = 'Allow only certs signed by CA2 but not in the CRL',
-    requestCert = true,
-    rejectUnauthorized = true,
-    CAs = {'ca2-cert'},
-    crl = {'ca2-crl'},
-    clients = {
-      { name = 'agent1', shouldReject = true, shouldAuth = false },
-      { name = 'agent2', shouldReject = true, shouldAuth = false },
-      { name = 'agent3', shouldReject = false, shouldAuth = true },
-      { name = 'agent4', shouldReject = true, shouldAuth = false },
-      { name = 'nocert', shouldReject = true }
-    }
-  }
-}
+local function loadPEM(rootName)
+  return path.join(module.dir, 'fixtures', 'keys', rootName)
+end
 
-local serverKey = fixture.loadPEM('agent2-key');
-local serverCert = fixture.loadPEM('agent2-cert');
+local function optionsIterator(options)
+  local i = 0
+  return function()
+    i = i + 1
+    return options[i]
+  end
+end
 
-function runClient(options, callback)
-  local args = { 's_client', '-connect', '127.0.0.1:' .. fixture.commonPort}
+local function runClient(options, port, callback)
+  local args = { 's_client', '-tls1', '-connect', '127.0.0.1:' .. port }
   print('  connecting with ' .. options.name)
 
   if options.name == 'agent1' then
     -- signed by CA1
     table.insert(args, '-key')
-    table.insert(args, fixture.filenamePEM('agent1-key'))
+    table.insert(args, loadPEM('agent1-key.pem'))
     table.insert(args, '-cert')
-    table.insert(args, fixture.filenamePEM('agent1-cert'))
+    table.insert(args, loadPEM('agent1-cert.pem'))
   elseif options.name == 'agent2' then
     -- self-signed
     table.insert(args, '-key')
-    table.insert(args, fixture.filenamePEM('agent2-key'))
+    table.insert(args, loadPEM('agent2-key.pem'))
     table.insert(args, '-cert')
-    table.insert(args, fixture.filenamePEM('agent2-cert'))
+    table.insert(args, loadPEM('agent2-cert.pem'))
   elseif options.name == 'agent3' then
     -- signed by CA2
     table.insert(args, '-key')
-    table.insert(args, fixture.filenamePEM('agent3-key'))
+    table.insert(args, loadPEM('agent3-key.pem'))
     table.insert(args, '-cert')
-    table.insert(args, fixture.filenamePEM('agent3-cert'))
+    table.insert(args, loadPEM('agent3-cert.pem'))
   elseif options.name == 'agent4' then
     table.insert(args, '-key')
-    table.insert(args, fixture.filenamePEM('agent4-key'))
+    table.insert(args, loadPEM('agent4-key.pem'))
     table.insert(args, '-cert')
-    table.insert(args, fixture.filenamePEM('agent4-cert'))
+    table.insert(args, loadPEM('agent4-cert.pem'))
   elseif options.name == 'nocert' then
   else
     error('Unknown agent name')
@@ -136,8 +82,13 @@ function runClient(options, callback)
 
   local rejected = true
   local authed = false
+  local app = 'openssl'
   local out = ''
-  local child = childprocess.spawn('openssl', args)
+  if los.type() == 'win32' then
+    app = 'C:\\Program Files\\OpenSSL\\bin\\openssl.exe'
+  end
+  p(app .. table.concat(args, ' '))
+  local child = childprocess.spawn(app, args)
   child.stdout:on('data', function(chunk)
     out = out .. chunk
     if out:find('_unauthed') then
@@ -164,64 +115,59 @@ function runClient(options, callback)
   end)
 end
 
-local successfulTests = 0
-function runTest(testIndex, done)
-  local tcase = testCases[testIndex]
-  local cas = {}
-  local crl = {}
+local function theTest(options)
+  local server, serverKey, serverCert, serverCA, serverCRL, port
+  local option, testIter
 
-  if not tcase then 
-    done()
-    return 
+  port = options.port
+
+  serverKey = fs.readFileSync(
+    path.join(module.dir, 'fixtures', 'keys', options.serverKey)
+  )
+  serverCert = fs.readFileSync(
+    path.join(module.dir, 'fixtures', 'keys', options.serverCert)
+  )
+  if options.serverCRL then
+    serverCRL = fs.readFileSync(
+      path.join(module.dir, 'fixtures', 'keys', options.serverCRL)
+    )
   end
-
-  -- load CAs
-  for _, v in pairs(tcase.CAs) do
-    cas[v] = fixture.loadPEM(v)
-  end
-
-  -- load CRLs
-  if tcase.crl then
-    for _, v in pairs(tcase.crl) do
-      crl[v] = fixture.loadPEM(v)
+  if type(options.serverCA) == 'table' then
+    serverCA = {}
+    for _, filename in ipairs(options.serverCA) do
+      local path = path.join(module.dir, 'fixtures', 'keys', filename)
+      local data = fs.readFileSync(path)
+      table.insert(serverCA, data)
     end
   else
-    crl = nil
+    serverCA = fs.readFileSync(
+      path.join(module.dir, 'fixtures', 'keys', options.serverCA)
+    )
   end
 
-  -- setup options
-  local serverOptions = {
+  serverOptions = {
     key = serverKey,
     cert = serverCert,
-    ca = cas,
-    crl = crl,
-    requestCert = tcase.requestCert,
-    rejectUnauthorized = tcase.rejectUnauthorized
+    ca = serverCA,
+    crl = serverCRL,
+    requestCert = options.requestCert,
+    rejectUnauthorized = options.rejectUnauthorized
   }
 
-  local connections = 0
-  local server
+  option = optionsIterator(options.clients)
 
-  function runNextClient(clientIndex)
-    local options = tcase.clients[clientIndex]
-    if options then
-      runClient(options, function()
-        runNextClient(clientIndex + 1)
-      end)
-    else
-      server:close()
-      successfulTests = successfulTests + 1
-      runTest(testIndex + 1, done)
-    end
+  function testIter()
+    local opt, cli = option()
+    if not opt then server:close() return end
+    runClient(opt, port, function() testIter() end)
   end
 
   server = tls.createServer(serverOptions, function(c)
-    connections = connections + 1
     if c.authorized == true then
-      print('- authed connection: ' .. c:getPeerCertificate().subject.CN)
+      print('- authed connection: ' .. tostring(c:getPeerCertificate():subject()))
       c:write('\n_authed\n')
     else
-      print('- unauthed connection: ' .. (c.authorizationError or 'undefined'))
+      print('- unauthed connection: ' .. (c.authorizationError and c.authorizationError.error_string or 'undefined'))
       c:write('\n_unauthed\n')
     end
     c:on('data', function(chunk)
@@ -231,11 +177,101 @@ function runTest(testIndex, done)
     end)
   end)
 
-  server:listen(fixture.commonPort, function()
-    runNextClient(1)
-  end)
+  server:listen(port, function() testIter() end)
 end
 
-runTest(1, function()
-  assert(#testCases == successfulTests)
+require('tap')(function(test)
+  test('Do not request certs. Everyone is unauthorized.', function()
+    local options = {
+      port = 32000,
+      serverKey = 'agent2-key.pem',
+      serverCert = 'agent2-cert.pem',
+      serverCA = 'ca1-cert.pem',
+      requestCert = false,
+      rejectUnauthorized = false,
+      clients = {
+        { name = 'agent1', shouldReject = false, shouldAuth = false },
+        { name = 'agent2', shouldReject = false, shouldAuth = false },
+        { name = 'agent3', shouldReject = false, shouldAuth = false },
+        { name = 'nocert', shouldReject = false, shouldAuth = false }
+      }
+    }
+    theTest(options)
+  end)
+
+  test('Allow both authed and unauthed connections with CA1', function()
+    local options = {
+      port = 33000,
+      serverKey = 'agent2-key.pem',
+      serverCert = 'agent2-cert.pem',
+      serverCA = 'ca1-cert.pem',
+      requestCert = true,
+      rejectUnauthorized = false,
+      clients = {
+        { name = 'agent1', shouldReject = false, shouldAuth = true },
+        { name = 'agent2', shouldReject = false, shouldAuth = false },
+        { name = 'agent3', shouldReject = false, shouldAuth = false },
+        { name = 'nocert', shouldReject = false, shouldAuth = false }
+      }
+    }
+    theTest(options)
+  end)
+
+  test('Allow only authed connections with CA1', function()
+    local options = {
+      port = 33000,
+      serverKey = 'agent2-key.pem',
+      serverCert = 'agent2-cert.pem',
+      serverCA = 'ca1-cert.pem',
+      requestCert = true,
+      rejectUnauthorized = true,
+      clients = {
+        { name = 'agent1', shouldReject = false, shouldAuth = true },
+        { name = 'agent2', shouldReject = true },
+        { name = 'agent3', shouldReject = true },
+        { name = 'nocert', shouldReject = true }
+      }
+    }
+    theTest(options)
+  end)
+
+  test('Allow only authed connections with CA1 and CA2', function()
+    local options = {
+      port = 33000,
+      serverKey = 'agent2-key.pem',
+      serverCert = 'agent2-cert.pem',
+      serverCA = { 'ca1-cert.pem', 'ca2-cert.pem' },
+      requestCert = true,
+      rejectUnauthorized = true,
+      clients = {
+        { name = 'agent1', shouldReject = false, shouldAuth = true },
+        { name = 'agent2', shouldReject = true },
+        { name = 'agent3', shouldReject = false, shouldAuth = true },
+        { name = 'nocert', shouldReject = true }
+      }
+    }
+    theTest(options)
+  end)
 end)
+
+--[[ Add CRL support to lua-openssl
+  test('Allow only certs signed by CA2 but not in the CRL', function()
+    local options = {
+      port = 33000,
+      serverKey = 'agent2-key.pem',
+      serverCert = 'agent2-cert.pem',
+      serverCA = { 'ca2-cert.pem' },
+      crl = {'ca2-crl'},
+      requestCert = true,
+      rejectUnauthorized = true,
+      clients = {
+        { name = 'agent1', shouldReject = true, shouldAuth = false },
+        { name = 'agent2', shouldReject = true, shouldAuth = false },
+        { name = 'agent3', shouldReject = false, shouldAuth = true },
+        { name = 'agent4', shouldReject = true, shouldAuth = false },
+        { name = 'nocert', shouldReject = true }
+      }
+    }
+    theTest(options)
+  end)
+--]]

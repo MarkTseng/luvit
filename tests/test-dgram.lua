@@ -1,6 +1,6 @@
 --[[
 
-Copyright 2012 The Luvit Authors. All Rights Reserved.
+Copyright 2014 The Luvit Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,47 +16,43 @@ limitations under the License.
 
 --]]
 
-require("helper")
 local dgram = require('dgram')
 
-local PORT = process.env.PORT or 10081
-local HOST = '127.0.0.1'
+require('tap')(function(test)
+  test('test udp', function(expect)
+    local PORT, HOST, s1, s2
+    local onMessageS1, onMessageS2, onError
 
-local s1 = dgram.createSocket('udp4')
-local s2 = dgram.createSocket('udp4')
+    HOST = '127.0.0.1'
+    PORT = 53211
 
-s1:on('message', function(msg, rinfo)
-  assert(#msg == 4)
-  assert(msg == 'PING')
-  s1:send('PONG', PORT+1, HOST, function(err)
-    if err then
+    s1 = dgram.createSocket()
+    s2 = dgram.createSocket()
+
+    function onMessageS1(msg, rinfo)
+      assert(#msg == 4)
+      assert(msg == 'PING')
+      s1:send('PONG', PORT+1, HOST)
+    end
+
+    function onMessageS2(msg, rinfo)
+      assert(#msg == 4)
+      assert(msg == 'PONG')
+      s1:close()
+      s2:close()
+    end
+
+    function onError(err)
       assert(err)
     end
+
+    s1:on('message', expect(onMessageS1))
+    s1:on('error', onError)
+    s1:bind(PORT,'127.0.0.1')
+
+    s2:on('message', expect(onMessageS2))
+    s2:on('error', onError)
+    s2:bind(PORT+1, '127.0.0.1')
+    s2:send('PING', PORT, HOST)
   end)
-  s1:close()
-end)
-
-s2:on('message', function(msg, rinfo)
-  assert(#msg == 4)
-  assert(msg == 'PONG')
-  s2:close()
-end)
-
-s1:on('error', function(err)
-  assert(err)
-end)
-
-s2:on('error', function(err)
-  assert(err)
-end)
-
-s1:bind(PORT)
-s2:bind(PORT+1)
-
-s2:send('PING', PORT, HOST, function(err)
-  if err then
-    assert(err)
-  end
-  s1:close()
-  s2:close()
 end)

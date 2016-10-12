@@ -1,6 +1,6 @@
 --[[
 
-Copyright 2012 The Luvit Authors. All Rights Reserved.
+Copyright 2014 The Luvit Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,43 +16,77 @@ limitations under the License.
 
 --]]
 
-require("helper")
+local decoder = require('http-codec').decoder
+local encoder = require('http-codec').encoder
+local uv = require('uv')
 
-local http = require('http')
+require('tap')(function (test)
 
-local HOST = "127.0.0.1"
-local PORT = process.env.PORT or 10080
-local server = nil
-local client = nil
+  test("Real HTTP request", function (expect)
+    uv.getaddrinfo("luvit.io", "http", {
+      socktype = "stream",
+      family = "inet",
+    }, expect(function (err, res)
+      assert(not err, err)
+      local client = uv.new_tcp()
+      client:connect(res[1].addr, res[1].port, expect(function (err)
+        assert(not err, err)
+        p {
+          client = client,
+          sock = client:getsockname(),
+          peer = client:getpeername(),
+        }
+        local encode, decode = encoder(), decoder()
+        local req = {
+            method = "GET", path = "/",
+            {"Host", "luvit.io"},
+            {"User-Agent", "luvit"},
+            {"Accept", "*/*"},
+        }
+        p(req)
+        client:write(encode(req))
+        local parts = {}
+        local data = ""
+        local finish
+        client:read_start(expect(function (err, chunk)
+          assert(not err, err)
+          if not chunk then
+            return finish()
+          end
+          data = data .. chunk
+          repeat
+            local event, extra = decode(data)
+            if event then
+              parts[#parts + 1] = event
+              if event == "" then return finish() end
+              data = extra
+            end
+          until not event
+        end))
 
-server = http.createServer(function(request, response)
-  p('server:onConnection')
-  p(request)
-  assert(request.method == "GET")
-  assert(request.url == "/foo")
-  -- Fails because header parsing is busted
-  -- assert(request.headers.bar == "cats")
-  p(response)
-  response:write("Hello")
-  response:finish()
-  server:close()
-end)
+        finish = expect(function ()
+          client:read_stop()
+          client:close()
+          local res = table.remove(parts, 1)
+          p(res)
+          -- luvit.io should redirect to https version
+          assert(res.code == 301)
 
-server:listen(PORT, HOST, function()
-  local req = http.request({
-    host = HOST,
-    port = PORT,
-    path = "/foo",
-    headers = {bar = "cats"}
-  }, function(response)
-    p('client:onResponse')
-    p(response)
-    assert(response.status_code == 200)
-    assert(response.version_major == 1)
-    assert(response.version_minor == 1)
-    -- TODO: fix refcount so this isn't needed.
-    process.exit()
+          local contentLength
+          for i = 1, #res do
+            if string.lower(res[i][1]) == "content-length" then
+              contentLength = tonumber(res[i][2])
+              break
+            end
+          end
+          for i = 1, #parts do
+            local item = parts[i]
+            contentLength = contentLength - #item
+            p(item)
+          end
+          assert(contentLength == 0)
+        end)
+      end))
+    end))
   end)
-  req:done()
 end)
-

@@ -1,6 +1,6 @@
 --[[
 
-Copyright 2012 The Luvit Authors. All Rights Reserved.
+Copyright 201202015 The Luvit Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,14 +16,34 @@ limitations under the License.
 
 --]]
 
-require("helper")
-local path = require('path')
-local fs = require('fs')
+require('tap')(function (test)
+  local path = require('path')
+  local fs = require('fs')
+  local __dirname = module.dir
+  local name = 'test-pipe'
+  local tmp_file = path.join(__dirname, 'tmp', name)
+  fs.writeFileSync(tmp_file, "")
 
-local tmp_file = path.join(__dirname, 'tmp', 'test_pipe')
-fs.writeFileSync(tmp_file, "")
+  local streamEventClosed = false
+  local streamEventAlreadyClosed = false
 
-local fp = fs.createReadStream('test-pipe.lua')
-local null = fs.createWriteStream(tmp_file)
-fp:pipe(null)
-assert(true)
+  local file_path = path.join(__dirname, name..'.lua')
+  test("pipe", function()
+    local fp = fs.createReadStream(file_path)
+    local null = fs.createWriteStream(tmp_file)
+    null:on('error', function(err)
+      p(err)
+      if err.message:find('write after end') then
+        streamEventAlreadyClosed = true
+      end
+    end)
+    null:on('closed', function()
+      p('closed')
+      streamEventClosed = true
+      null:write('after closed')
+    end)
+    fp:pipe(null)
+
+    assert(true)
+  end)
+end)

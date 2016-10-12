@@ -14,18 +14,16 @@ local request = "GET / HTTP/1.1\r\n\r\n"
 local num = 0
 local function chain()
 	local client
-	client = net.createConnection(PORT, HOST, function () 
+	client = net.createConnection(PORT, HOST, function ()
 		local size
 		local function makeRequest()
 			size = 0
 			client:write(request)
 		end
-		client:on("data", function (chunk) 
+		client:on("data", function (chunk)
 			size = size + #chunk
-			if size == 44 then
-				num = num + 1
-				makeRequest()
-			end
+			num = num + 1
+			makeRequest()
 		end)
 		makeRequest()
 	end)

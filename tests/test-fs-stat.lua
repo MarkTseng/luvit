@@ -16,104 +16,67 @@ limitations under the License.
 
 --]]
 
-require("helper")
-
 local FS = require('fs')
 local JSON = require('json')
 
-local got_error = false
-local success_count = 0
 
-FS.stat('.', function(err, stats)
-  if err then
-    got_error = true
-  else
-    p(JSON.stringify(stats))
-    assert(type(stats.mtime) == 'number')
-    success_count = success_count + 1
-  end
-end)
 
-FS.lstat('.', function(err, stats)
-  if err then
-    got_error = true
-  else
-    p(JSON.stringify(stats))
-    assert(type(stats.mtime) == 'number')
-    success_count = success_count + 1
-  end
-end)
+require('tap')(function(test)
 
--- fstat
---FS.open('.', 'r', nil, function(err, fd)
-FS.open('.', 'r', function(err, fd)
-  assert(not err)
-  assert(fd)
-
-  FS.fstat(fd, function(err, stats)
-    if err then
-      got_error = true
-    else
+  test('fs.stat', function()
+    FS.stat('.', function(err, stats)
+      assert(not err)
       p(JSON.stringify(stats))
-      assert(type(stats.mtime) == 'number')
-      success_count = success_count + 1
-      FS.close(fd)
-    end
+      assert(type(stats.mtime.sec) == 'number')
+    end)
   end)
 
+
+  test('fs.lstat', function()
+    FS.lstat('.', function(err, stats)
+      assert(not err)
+      p(JSON.stringify(stats))
+      assert(type(stats.mtime.sec) == 'number')
+    end)
+  end)
+
+  -- fstat
+  test('fs.open', function()
+    FS.open('.', 'r', function(err, fd)
+      assert(not err)
+      assert(fd)
+      FS.fstat(fd, function(err, stats)
+        assert(not err)
+        p(JSON.stringify(stats))
+        assert(type(stats.mtime.sec) == 'number')
+        FS.close(fd)
+      end)
+    end)
+  end)
+
+  -- fstatSync
+  test('fstatSync', function()
+    FS.open('.', 'r', function(err, fd)
+      local ok, stats
+      ok, stats = pcall(FS.fstatSync, fd)
+      assert(ok)
+      if stats then
+        p(JSON.stringify(stats))
+        assert(type(stats.mtime.sec) == 'number')
+      end
+      FS.close(fd)
+    end)
+  end)
+
+  test('stat', function()
+    p('stating: ' .. module.path)
+    FS.stat(module.path, function(err, s)
+      assert(not err)
+      p(JSON.stringify(s))
+      assert(s.type == 'file')
+      assert(type(s.mtime.sec) == 'number')
+    end)
+  end)
 end)
 
--- fstatSync
---FS.open('.', 'r', nil, function(err, fd)
-FS.open('.', 'r', function(err, fd)
-  local ok, stats
-  ok, stats = pcall(FS.fstatSync, fd)
-  if not ok then
-    got_error = true
-  end
-  if stats then
-    p(JSON.stringify(stats))
-    assert(type(stats.mtime) == 'number')
-    success_count = success_count + 1
-  end
-  FS.close(fd)
-end)
-
-p('stating: ' .. __filename)
-FS.stat(__filename, function(err, s)
-  if err then
-    got_error = true
-  else
-    p(JSON.stringify(s))
-    success_count = success_count + 1
-
-    p('is_directory: ' .. JSON.stringify(s.is_directory))
-    assert(false == s.is_directory)
-
-    p('is_file: ' .. JSON.stringify(s.is_file))
-    assert(true == s.is_file)
-
-    p('is_socket: ' .. JSON.stringify(s.is_socket))
-    assert(false == s.is_socket)
-
-    p('is_block_device: ' .. JSON.stringify(s.is_block_device))
-    assert(false == s.is_block_device)
-
-    p('is_character_device: ' .. JSON.stringify(s.is_character_device))
-    assert(false == s.is_character_device)
-
-    p('is_fifo: ' .. JSON.stringify(s.is_fifo))
-    assert(false == s.is_fifo)
-
-    p('is_symbolic_link: ' .. JSON.stringify(s.is_symbolic_link))
-    assert(false == s.is_symbolic_link)
-
-    assert(type(s.mtime) == 'number')
-  end
-end)
-
-process:on('exit', function()
-  assert(5 == success_count)
-  assert(false == got_error)
-end)
 

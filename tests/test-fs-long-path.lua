@@ -1,6 +1,6 @@
 --[[
 
-Copyright 2012 The Luvit Authors. All Rights Reserved.
+Copyright 2012-2015 The Luvit Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License")
 you may not use this file except in compliance with the License.
@@ -16,38 +16,42 @@ limitations under the License.
 
 --]]
 
-require("helper")
 
-local math = require('math')
-local string = require('string')
-local FS = require('fs')
-local Path = require('path')
-local JSON = require('json')
+require('tap')(function(test)
+  local math = require('math')
+  local string = require('string')
+  local FS = require('fs')
+  local Path = require('path')
+  local JSON = require('json')
 
-local successes = 0
+  local successes = 0
 
--- make a path that will be at least 260 chars long.
-local tmpDir = Path.join(__dirname, 'tmp')
-local fileNameLen = math.max(260 - #tmpDir - 1, 1)
-local fileName = Path.join(tmpDir, string.rep('x', fileNameLen))
+  -- make a path that will be at least 260 chars long.
+  local tmpDir = Path.join(module.dir, 'tmp')
+  local fileNameLen = math.max(260 - #tmpDir - 1, 1)
+  local fileName = Path.join(tmpDir, string.rep('x', fileNameLen))
 
-p('fileName=' .. fileName)
-p('fileNameLength=' .. #fileName)
+  test('fs longpoath', function()
+    p('fileName=' .. fileName)
+    p('fileNameLength=' .. #fileName)
 
-FS.writeFile(fileName, 'ok', function(err)
-  if err then
-    return err
-  end
-  successes = successes + 1
+    FS.writeFile(fileName, 'ok', function(err)
+      if err then
+        return err
+      end
+      successes = successes + 1
 
-  FS.stat(fileName, function(err, stats)
-    if err then
-      return err
-    end
-    successes = successes + 1
+      FS.stat(fileName, function(err, stats)
+        if err then
+          return err
+        else
+          successes = successes + 1
+          assert(successes == 2)
+          if successes > 0 then
+            FS.unlinkSync(fileName)
+          end
+        end
+      end)
+    end)
   end)
-end)
-
-process:on('exit', function()
-  assert(successes == 2)
 end)

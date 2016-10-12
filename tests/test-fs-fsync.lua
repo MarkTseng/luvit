@@ -1,6 +1,6 @@
 --[[
 
-Copyright 2012 The Luvit Authors. All Rights Reserved.
+Copyright 2012-2015 The Luvit Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License")
 you may not use this file except in compliance with the License.
@@ -16,47 +16,35 @@ limitations under the License.
 
 --]]
 
-require("helper")
+require('tap')(function(test)
+  local FS = require('fs')
+  local Path = require('path')
 
-local FS = require('fs')
-local Path = require('path')
+  test('fs sync operation', function()
+    local file = Path.join(module.dir, 'fixtures', 'a.lua')
 
-local successes = 0
+    p('open ' .. file)
 
-local file = Path.join(__dirname, 'fixtures', 'a.lua')
+    FS.open(file, 'a', '0777', function(err, fd)
+      print(err, fd)
+      p('fd ' .. fd)
+      assert(not err)
 
-p('open ' .. file)
+      FS.fdatasyncSync(fd)
+      p('fdatasync SYNC: ok')
 
-FS.open(file, 'a', '0777', function(err, fd)
-  p('fd ' .. fd)
-  if err then
-    return err
-  end
+      FS.fsyncSync(fd)
+      p('fsync SYNC: ok')
 
-  FS.fdatasyncSync(fd)
-  p('fdatasync SYNC: ok')
-  successes = successes + 1
-
-  FS.fsyncSync(fd)
-  p('fsync SYNC: ok')
-  successes = successes + 1
-
-  FS.fdatasync(fd, function(err)
-    if err then
-      return err
-    end
-    p('fdatasync ASYNC: ok')
-    successes = successes + 1
-    FS.fsync(fd, function(err)
-      if err then
-        return err
-      end
-      p('fsync ASYNC: ok')
-      successes = successes + 1
+      FS.fdatasync(fd, function(err)
+        assert(not err)
+        p('fdatasync ASYNC: ok')
+        FS.fsync(fd, function(err)
+          assert(not err)
+          p('fsync ASYNC: ok')
+        end)
+      end)
     end)
-  end)
-end)
 
-process:on('exit', function()
-  assert(successes == 4)
+  end)
 end)

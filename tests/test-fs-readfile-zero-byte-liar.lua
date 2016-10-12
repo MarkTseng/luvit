@@ -1,6 +1,6 @@
 --[[
 
-Copyright 2012 The Luvit Authors. All Rights Reserved.
+Copyright 2012-2015 The Luvit Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License")
 you may not use this file except in compliance with the License.
@@ -16,45 +16,44 @@ limitations under the License.
 
 --]]
 
-require("helper")
+require('tap')(function(test)
 
-local FS = require('fs')
-local Path = require('path')
-local Buffer = require('buffer').Buffer
-local string = require('string')
+  local FS = require('fs')
+  local Path = require('path')
+  local Buffer = require('buffer').Buffer
+  local string = require('string')
+  local __filename = module.path
 
-local dataExpected = FS.readFileSync(__filename)
+  local dataExpected = FS.readFileSync(__filename)
 
--- sometimes stat returns size=0, but it's a lie.
-FS._fstat = FS.fstat
-FS._fstatSync = FS.fstatSync
+  test('fs readfile zero byte liar', function()
+    -- sometimes stat returns size=0, but it's a lie.
+    local _fstat,_fstatSync = FS.fstat,FS.fstatSync
+    FS._fstat = FS.fstat
+    FS._fstatSync = FS.fstatSync
 
-FS.fstat = function(fd, cb)
-  FS._fstat(fd, function(er, st)
-    if er then
-      return cb(er)
+    FS.fstat = function(fd, cb)
+      FS._fstat(fd, function(er, st)
+        if er then
+          return cb(er)
+        end
+        st.size = 0
+        return cb(er, st)
+      end)
     end
-    st.size = 0
-    return cb(er, st)
+
+    FS.fstatSync = function(fd)
+      local st = FS._fstatSync
+      st.size = 0
+      return st
+    end
+
+    local d = FS.readFileSync(__filename)
+    assert(d == dataExpected)
+
+    FS.readFile(__filename, function (er, d)
+      assert(d == dataExpected)
+      FS.fstat,FS.fstatSync = _fstat,_fstatSync
+    end)
   end)
-end
-
-FS.fstatSync = function(fd)
-  local st = FS._fstatSync
-  st.size = 0
-  return st
-end
-
-local d = FS.readFileSync(__filename)
-assert(d == dataExpected)
-
-local called = false
-FS.readFile(__filename, function (er, d)
-  assert(d == dataExpected)
-  called = true
-end)
-
-process:on('exit', function()
-  assert(called)
-  p("ok")
 end)

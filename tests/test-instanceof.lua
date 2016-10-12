@@ -1,6 +1,6 @@
 --[[
 
-Copyright 2012 The Luvit Authors. All Rights Reserved.
+Copyright 2014 The Luvit Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,37 +16,29 @@ limitations under the License.
 
 --]]
 
-require("helper")
-
 local core = require("core")
-Object = core.Object
-Emitter = core.Emitter
-instanceof = core.instanceof
+local Object = core.Object
+local Emitter = core.Emitter
+local instanceof = core.instanceof
 
-local uv = require("uv")
-Handle = uv.Handle
+require('tap')(function (test)
+  test("test instanceof", function()
+    local o = Object:new()
+    local e = Emitter:new()
 
-local o = Object:new()
-local e = Emitter:new()
-local h = Handle:new()
+    assert(instanceof(o, Object))
+    assert(not instanceof(o, Emitter))
 
-assert(instanceof(o, Object))
-assert(not instanceof(o, Emitter))
-assert(not instanceof(o, Handle))
+    assert(instanceof(e, Emitter))
+    assert(instanceof(e, Object))
 
-assert(instanceof(e, Emitter))
-assert(instanceof(e, Object))
-assert(not instanceof(e, Handle))
+    assert(not instanceof({}, Object))
+    assert(not instanceof(2, Object))
+    assert(not instanceof('a', Object))
+    assert(not instanceof(function() end, Object))
 
-assert(instanceof(h, Handle))
-assert(instanceof(h, Emitter))
-assert(instanceof(h, Object))
-
-assert(not instanceof({}, Object))
-assert(not instanceof(2, Object))
-assert(not instanceof('a', Object))
-assert(not instanceof(function() end, Object))
-
--- Caveats: We would like to these to be false, but we could not.
-assert(instanceof(Object, Object))
-assert(instanceof(Emitter, Object))
+    -- Caveats: We would like to these to be false, but we could not.
+    assert(instanceof(Object, Object))
+    assert(instanceof(Emitter, Object))
+  end)
+end)

@@ -1,117 +1,60 @@
-# Luvit (Lua + libUV + jIT = pure awesomesauce)
+# Luvit 2.0 - Node.JS for the Lua Inventor
 
-[![Build Status](https://secure.travis-ci.org/luvit/luvit.png)](http://travis-ci.org/luvit/luvit)
+[![Linux Build Status](https://travis-ci.org/luvit/luvit.svg?branch=master)](https://travis-ci.org/luvit/luvit)
+[![Windows Build status](https://ci.appveyor.com/api/projects/status/72ccr146fm51k7up/branch/master?svg=true)](https://ci.appveyor.com/project/racker-buildbot/luvit/branch/master)
+[![#luvit on Freenode](https://img.shields.io/Freenode/%23luvit.png)](https://webchat.freenode.net/?channels=luvit)
 
-Luvit is an attempt to do something crazy by taking node.js' awesome
-architecture and dependencies and seeing how it fits in the Lua language.
 
-This project is still under heavy development, but it's showing promise. In
-initial benchmarking with a hello world server, this is between 2 and 4 times
-faster than node.js. Version 0.5.0 is the latest release version.
+Welcome to the source code for Luvit 2.0.  This repo contains the luvit/luvit metapackage and all luvit/* packages as published to [lit][].
 
-Do you have a question/want to learn more? Make sure to check out the [mailing
-list](http://groups.google.com/group/luvit/) and drop by our IRC channel, #luvit
-on Freenode.
+This collection of packages and modules implements a node.js style API for the [luvi][]/[lit][] runtime.  It can be used as both a library or a standalone executable.
 
-```lua
--- Load the http library
-local HTTP = require("http")
+See the main project webpage for more details. <https://luvit.io/>
 
--- Create a simple nodeJS style hello-world server
-HTTP.createServer(function (req, res)
-  local body = "Hello World\n"
-  res:writeHead(200, {
-    ["Content-Type"] = "text/plain",
-    ["Content-Length"] = #body
-  })
-  res:finish(body)
-end):listen(8080)
+## Need Help?
 
--- Give a friendly message
-print("Server listening at http://localhost:8080/")
-```
+Ask questions here through issues, on irc [#luvit@freenode](irc://chat.freenode.net/luvit) or the [mailing list](https://groups.google.com/forum/#!forum/luvit).
 
-### Building from git
+## Binary Modules
 
-Grab a copy of the source code:
+Luvit supports FFI and Lua based binary modules. There is a wiki entry
+explaining how to manage and include a binary module within a bundled
+application. [Publishing Compiled Code][]
 
-`git clone https://github.com/luvit/luvit.git --recursive`
+## Hacking on Luvit Core
 
-To use the gyp build system run:
+First you need to clone and build luvit, this is easy and works cross-platform thanks to `Makefile` and `make.bat`.
 
-```
-cd luvit
-./configure
-make -C out
-tools/build.py test
-./out/Debug/luvit
-```
-
-To use the Makefile build system (for embedded systems without python)
-run:
-
-```
+```sh
+git clone https://github.com/luvit/luvit.git
 cd luvit
 make
-make test
-./build/luvit
 ```
 
-## Debugging
+If you want to test luvit without constantly building, use `luvi`.
 
-Luvit contains an extremely useful debug API. Lua contains a stack which is used
-to manipulate the virtual machine and return values to 'C'. It is often very
-useful to display this stack to aid in debugging. In fact, this API is
-accessible via C or from Lua.
-
-### Stackwalk
-
-```lua
-require('_debug').stackwalk(errorString)
+```sh
+luvi . 
 ```
 
-Displays a backtrace of the current Lua state. Useful when an error happens and
-you want to get a call stack.
+Always make sure to run `make test` before submitting a PR.
 
-example output:
+## Notes to Maintainers
 
-```text
-Lua stack backtrace: error
-    in Lua code at luvit/tests/test-crypto.lua:69 fn()
-    in Lua code at luvit/lib/luvit/module.lua:67 myloadfile()
-    in Lua code at luvit/lib/luvit/luvit.lua:285 (null)()
-    in native code
-    in Lua code at luvit/lib/luvit/luvit.lua:185 (null)()
-    in native code
-    in Lua code at [string "    local path = require('uv_native').execpat..."]:1 (null)()
-```
+ - Use `luvi /path/to/luvit` to test changes without rebuilding the binary.
+ - To run the test suite, run `make test` to build a luvit and use that.
+ - If you want to test a custom built luvi, run `luvi . -- tests/run.lua`
+ - If you want to run a specific test file with a custom built luvi, run `luvi . -- tests/test-<name-of-test>.lua` (e.g. `luvi . -- tests/test-http.lua`)
+ - There is a wiki page on making new luvit releases at <https://github.com/luvit/luvit/wiki/Making-a-luvit-release>.
 
-### Stackdump
+The packages in deps live primarily in this repo, but some are duplicated in
+luvit/lit to ease `lit` bootstrapping.  Updates can be pushed from either repo
+to lit, just make sure to keep them in sync.  One way to do this is to `rm -rf
+deps && lit install`.  This will install the latest version of all the
+packages from lit.  Check the diff carefully to make sure you're not undoing
+any work.  There might have been unpublished changes locally in luvit that
+aren't in the lit central database yet.
 
-```lua
-require('_debug').stackdump(string)
-```
-
-```c
-luv_lua_debug_stackdump(L, "a message");
-```
-
-Stackdump is extremly useful from within C modules.
-
-### Debugger
-
-```lua
-require('_debug').debugger()
-```
-
-Supports the following commands:
-
-* quit
-* exit
-* break
-* clear
-* clearall
-* trace
-* bt
-
-The debugger will execute any arbitrary Lua statement by default.
+[Publishing Compiled Code]: https://github.com/luvit/lit/wiki/Publishing-Compiled-Code
+[lit]: https://github.com/luvit/lit/
+[luvi]: https://github.com/luvit/luvi/

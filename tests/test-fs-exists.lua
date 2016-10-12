@@ -1,6 +1,6 @@
 --[[
 
-Copyright 2012 The Luvit Authors. All Rights Reserved.
+Copyright 2012-2015 The Luvit Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License")
 you may not use this file except in compliance with the License.
@@ -16,31 +16,24 @@ limitations under the License.
 
 --]]
 
-require("helper")
+require('tap')(function(test)
+    local FS = require('fs')
+    local Path = require('path')
 
-local FS = require('fs')
-local Path = require('path')
+    local f = module.path
 
-local f = __filename
-local exists
-local doesNotExist
+    test('fs.exists', function()
+      -- TODO: Is it OK that this callback signature is different from node.js,
+      --       which is function(exists)?
+      FS.exists(f, function(err, y)
+        assert(y)
+      end)
 
--- TODO: Is it OK that this callback signature is different from node.js,
---       which is function(exists)?
-FS.exists(f, function(err, y)
-  exists = y
---  p("exists=" .. tostring(exists))
-end)
+      FS.exists(f .. '-NO', function(err, y)
+        assert(not y)
+      end)
 
-FS.exists(f .. '-NO', function(err, y)
-  doesNotExist = y
---  p("doesNotExist=" .. tostring(doesNotExist))
-end)
-
-assert(FS.existsSync(f))
-assert(not FS.existsSync(f .. '-NO'))
-
-process:on('exit', function()
-  assert(exists == true)
-  assert(doesNotExist == false)
+      assert(FS.existsSync(f))
+      assert(not FS.existsSync(f .. '-NO'))
+    end)
 end)

@@ -1,6 +1,6 @@
 --[[
 
-Copyright 2012 The Luvit Authors. All Rights Reserved.
+Copyright 2015 The Luvit Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License")
 you may not use this file except in compliance with the License.
@@ -16,19 +16,11 @@ limitations under the License.
 
 --]]
 
-require("helper")
-
-local FS = require('fs')
+local fs = require('fs')
 local join = require('path').join
 local Buffer = require('buffer').Buffer
 
-local filename = join(__dirname, 'fixtures', 'append.txt')
-
-p('appending to ' .. filename)
-
 local currentFileData = 'ABCD'
-
-local n = 220
 local s = '南越国是前203年至前111年存在于岭南地区的一个国家，国都位于番禺，疆域包括今天中国的广东、' ..
         '广西两省区的大部份地区，福建省、湖南、贵州、云南的一小部份地区和越南的北部。' ..
         '南越国是秦朝灭亡后，由南海郡尉赵佗于前203年起兵兼并桂林郡和象郡后建立。' ..
@@ -37,104 +29,78 @@ local s = '南越国是前203年至前111年存在于岭南地区的一个国家
         '历经五代君主。南越国是岭南地区的第一个有记载的政权国家，采用封建制和郡县制并存的制度，' ..
         '它的建立保证了秦末乱世岭南地区社会秩序的稳定，有效的改善了岭南地区落后的政治、##济现状。\n'
 
-local ncallbacks = 0
-
--- test that empty file will be created and have content added
-FS.appendFile(filename, s, function(e)
-  if e then
-    return e
-  end
-
-  ncallbacks = ncallbacks + 1
-  p('appended to file')
-
-  FS.readFile(filename, function(e, buffer)
-    if e then
-      return e
+require('tap')(function(test)
+  test('test empty file creation', function(expect)
+    local filename = join('tests', 'fixtures', 'append.txt')
+    local function onReadFile(e, buffer)
+      assert(not e)
+      p('file read')
+      assert(#buffer == #s)
+      fs.unlinkSync(filename)
     end
-    p('file read')
-    ncallbacks = ncallbacks + 1
-    assert(#buffer == #s)
-  end)
-end)
-
--- test that appends data to a non empty file
-local filename2 = join(__dirname, 'fixtures', 'append2.txt')
-FS.writeFileSync(filename2, currentFileData)
-
-FS.appendFile(filename2, s, function(e)
-  if e then
-    return e
-  end
-
-  ncallbacks = ncallbacks + 1
-  p('appended to file2')
-
-  FS.readFile(filename2, function(e, buffer)
-    if e then
-      return e
+    local function onAppendFile(e)
+      assert(not e)
+      p('appended to file')
+      fs.readFile(filename, expect(onReadFile))
     end
-    p('file2 read')
-    ncallbacks = ncallbacks + 1
-    assert(#buffer == #s + #currentFileData)
+    fs.unlinkSync(filename)
+    fs.appendFile(filename, s, expect(onAppendFile))
   end)
-end)
 
--- test that appendFile accepts buffers
-local filename3 = join(__dirname, 'fixtures', 'append3.txt')
-FS.writeFileSync(filename3, currentFileData)
-
-local buf = Buffer:new(s)
-p('appending to ' .. filename3)
-
-FS.appendFile(filename3, buf:toString(), function(e)
-  if e then
-    return e
-  end
-
-  ncallbacks = ncallbacks + 1
-  p('appended to file3')
-
-  FS.readFile(filename3, function(e, buffer)
-    if e then
-      return e
+  test('test append to non empty file', function(expect)
+    local filename2 = join('tests', 'fixtures', 'append2.txt')
+    local function onReadFile(e, buffer)
+      p('file2 read')
+      assert(not e)
+      assert(#buffer == #s + #currentFileData)
+      fs.unlinkSync(filename2)
     end
-    p('file3 read')
-    ncallbacks = ncallbacks + 1
-    assert(#buffer == buf.length + #currentFileData)
-  end)
-end)
-
--- test that appendFile accepts numbers.
-local filename4 = join(__dirname, 'fixtures', 'append4.txt')
-FS.writeFileSync(filename4, currentFileData)
-
-p('appending to ' .. filename4)
-
-FS.appendFile(filename4, tostring(n), function(e)
-  if e then
-    return e
-  end
-
-  ncallbacks = ncallbacks + 1
-  p('appended to file4')
-
-  FS.readFile(filename4, function(e, buffer)
-    if e then
-      return e
+    local function onAppendFile(e)
+      p('appended to file2')
+      assert(not e)
+      fs.readFile(filename2, onReadFile)
     end
-    p('file4 read')
-    ncallbacks = ncallbacks + 1
-    assert(#buffer == #tostring(n) + #currentFileData)
+    fs.unlinkSync(filename2)
+    fs.writeFileSync(filename2, currentFileData)
+    fs.appendFile(filename2, s, expect(onAppendFile))
   end)
-end)
 
-process:on('exit', function()
-  p('done')
-  assert(ncallbacks == 8)
+  test('test append file accepting buffers', function(expect)
+    local filename3 = join('tests', 'fixtures', 'append3.txt')
+    local buf = Buffer:new(s)
+    p('appending to ' .. filename3)
+    local function onReadFile(e, buffer)
+      assert(not e)
+      p('file3 read')
+      assert(#buffer == buf.length + #currentFileData)
+      fs.unlinkSync(filename3)
+    end
+    local function onAppendFile(e)
+      p('appended to file3')
+      assert(not e)
+      fs.readFile(filename3, onReadFile)
+    end
+    fs.unlinkSync(filename3)
+    fs.writeFileSync(filename3, currentFileData)
+    fs.appendFile(filename3, buf:toString(), onAppendFile)
+  end)
 
-  FS.unlinkSync(filename)
-  FS.unlinkSync(filename2)
-  FS.unlinkSync(filename3)
-  FS.unlinkSync(filename4)
+  test('test append file sync create file', function(expect)
+    local filename = join('tests', 'fixtures', 'append-sync.txt')
+    fs.unlinkSync(filename)
+    assert(not fs.appendFileSync(filename, s))
+    local fileData = fs.readFileSync(filename)
+    assert(s == fileData)
+    fs.unlinkSync(filename)
+  end)
+
+  test('test append file sync non empty file', function(expect)
+    local filename = join('tests', 'fixtures', 'append-sync2.txt')
+    fs.unlinkSync(filename)
+    fs.writeFileSync(filename, currentFileData)
+    assert(not fs.appendFileSync(filename, s))
+    local fileData = fs.readFileSync(filename)
+    assert(currentFileData .. s == fileData)
+    fs.unlinkSync(filename)
+  end)
 end)

@@ -1,6 +1,6 @@
 --[[
 
-Copyright 2012 The Luvit Authors. All Rights Reserved.
+Copyright 2012-2014 The Luvit Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,28 +16,27 @@ limitations under the License.
 
 --]]
 
-require("helper")
+require("tap")(function (test)
+  test("Foo:new returns new instances", function ()
+    local Foo = require('core').Object:extend()
+    function Foo:initialize(bar)
+      self.bar = bar
+    end
+    function Foo.meta.__tostring(table)
+      return tostring(table.bar)
+    end
 
---
--- Foo:new returns new instances
---
+    local Baz = Foo:extend()
 
-local Foo = require('core').Object:extend()
-function Foo:initialize(bar)
-  self.bar = bar
-end
-function Foo.meta.__tostring(table)
-	return tostring(table.bar)
-end
+    local foo1 = Foo:new(1)
+    local foo2 = Foo:new(1)
+    assert(foo1 ~= foo2)
+    assert(tostring(foo1) == tostring(foo2))
+    assert(foo1.bar == foo2.bar)
 
-local Baz = Foo:extend()
+    local msg = 'asd'
+    local baz1 = Baz:new(msg)
+    assert(tostring(baz1) == msg)
+  end)
+end)
 
-local foo1 = Foo:new(1)
-local foo2 = Foo:new(1)
-assert(foo1 ~= foo2)
-assert(tostring(foo1) == tostring(foo2))
-assert(foo1.bar == foo2.bar)
-
-local msg = 'asd'
-local baz1 = Baz:new(msg)
-assert(tostring(baz1) == msg)

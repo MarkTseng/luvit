@@ -1,6 +1,6 @@
 --[[
 
-Copyright 2012 The Luvit Authors. All Rights Reserved.
+Copyright 2012-2015 The Luvit Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License")
 you may not use this file except in compliance with the License.
@@ -16,32 +16,36 @@ limitations under the License.
 
 --]]
 
-require("helper")
+require('tap')(function(test)
+  local FS = require('fs')
+  local Path = require('path')
+  local Buffer = require('buffer').Buffer
+  local string = require('string')
 
-local FS = require('fs')
-local Path = require('path')
-local Buffer = require('buffer').Buffer
-local string = require('string')
+  local dirName = Path.join(module.dir, 'fixtures', 'test-readfile-unlink')
+  local fileName = Path.join(dirName, 'test.bin')
 
-local dirName = Path.join(__dirname, 'fixtures', 'test-readfile-unlink')
-local fileName = Path.join(dirName, 'test.bin')
+  local bufStr = string.rep(string.char(42), 512 * 1024)
+  local buf = Buffer:new(bufStr)
 
-local bufStr = string.rep(string.char(42), 512 * 1024)
-local buf = Buffer:new(bufStr)
+  test('fs readfile unlink', function()
 
-local ok, err
-ok, err = pcall(FS.mkdirSync, dirName, '0777')
-if not ok then
-  assert(err.code == 'EEXIST')
-end
+    local ok, err
 
-FS.writeFileSync(fileName, buf:toString())
+    ok, err = pcall(FS.mkdirSync, dirName, '0777')
+    if not ok then
+      assert(err.code == 'EEXIST')
+    end
 
-FS.readFile(fileName, function(err, data)
-  assert(err == nil)
-  assert(#data == buf.length)
-  assert(string.byte(data, 1) == 42)
+    FS.writeFileSync(fileName, buf:toString())
+    FS.readFile(fileName, function(err, data)
+      assert(err == nil)
+      assert(#data == buf.length)
+      assert(string.byte(data, 1) == 42)
 
-  FS.unlinkSync(fileName)
-  FS.rmdirSync(dirName)
+      FS.unlink(fileName, function()
+        FS.rmdirSync(dirName)
+      end)
+    end)
+  end)
 end)

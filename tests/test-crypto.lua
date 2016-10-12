@@ -1,69 +1,78 @@
-local crypto = require('_crypto')
+--[[
+
+Copyright 2014 The Luvit Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS-IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+--]]
+
+
+local _, openssl = pcall(require, 'openssl')
+
+if openssl == nil then
+  return
+end
+
 local fs = require('fs')
-local path = require('path')
+local path = require('luvi').path
 
 local message1 = 'This message '
 local message2 = 'will be signed'
 local message = message1 .. message2
 
-local ca_path = path.join(__dirname, 'ca')
-local RSA_PUBLIC_KEY = fs.readFileSync(path.join(ca_path, 'server.pub'))
-local RSA_PRIV_KEY = fs.readFileSync(path.join(ca_path, 'server.key.insecure'))
-local kpriv = crypto.pkey.from_pem(RSA_PRIV_KEY, true)
-local kpub = crypto.pkey.from_pem(RSA_PUBLIC_KEY)
+require('tap')(function (test)
 
--- TODO: FIX the private key output is wrong in luvit,
--- it was fine in virgo
---assert(kpriv:to_pem(true) == RSA_PRIV_KEY)
-assert(kpub:to_pem() == RSA_PUBLIC_KEY)
+  local ca_path = path.join(module.dir, 'ca')
+  local RSA_PUBLIC_KEY = fs.readFileSync(path.join(ca_path, 'server.pub'))
+  local RSA_PRIV_KEY = fs.readFileSync(path.join(ca_path, 'server.key.insecure'))
+  local kpriv = openssl.pkey.read(RSA_PRIV_KEY, true)
+  local kpub = openssl.pkey.read(RSA_PUBLIC_KEY)
+  local sha256 = openssl.digest.get("sha256")
 
--- Test digests
+  assert(kpub:export({pem = true}) == RSA_PUBLIC_KEY)
 
-local hash = 'da0fd2505f0fc498649d6cf9abc7513be179b3295bb1838091723b457febe96a'
+  test("test digests", function()
+    local hash = 'da0fd2505f0fc498649d6cf9abc7513be179b3295bb1838091723b457febe96a'
+    local d = openssl.digest.new(sha256)
+    d:update(message1)
+    d:update(message2)
+    local ret = d:final()
+    assert(hash == ret)
 
-local d = crypto.digest.new("sha256")
-d:update(message1)
-d:update(message2)
-local ret = d:final()
-assert(hash == ret)
+    d:reset(d)
+    d:update(message1)
+    ret = d:final()
+    assert(hash ~= ret)
+  end)
 
-d:reset(d)
-d:update(message1)
-ret = d:final()
-assert(hash ~= ret)
+  test("test signing", function()
+    local sig = kpriv:sign(message, sha256)
+    assert(openssl.pkey.verify(kpub, message1 .. message2, sig, sha256))
+  end)
 
--- Test Signing
-sig = crypto.sign('sha256', message, kpriv)
+  test("streaming verification", function()
+    local sig = kpriv:sign(message, sha256)
+    assert(openssl.pkey.verify(kpub, message1 .. message2, sig, sha256))
+    assert(not openssl.pkey.verify(kpub, message1 .. message2 .. 'x', sig, sha256))
+  end)
 
-local v = crypto.verify.new('sha256')
-v:update(message1)
-v:update(message2)
-local verified = v:final(sig, kpub)
-assert(verified)
-local sig = crypto.sign('sha256', message, kpriv)
+  test("full buffer verify", function()
+    local sig = kpriv:sign(message, sha256)
+    assert(openssl.pkey.verify(kpub, message, sig, sha256))
+    assert(not openssl.pkey.verify(kpub, message..'x', sig, sha256))
+  end)
 
--- Test streaming verification
-local v = crypto.verify.new('sha256')
-v:update(message1)
-v:update(message2)
-local verified = v:final(sig, kpub)
-assert(verified)
-
-local nv = crypto.verify.new('sha256')
-nv:update(message1)
-nv:update(message2 .. 'x')
-local nverified = nv:final(sig, kpub)
-assert(not nverified)
-
--- Test full buffer verify
-verified = crypto.verify('sha256', message, sig, kpub)
-assert(verified)
-
-nverified = crypto.verify('sha256', message..'x', sig, kpub)
-assert(not nverified)
-
--- Test bogus RSA
-local bogus = crypto.pkey.from_pem(1)
-assert(bogus == nil)
-
-
+  test("bogus rsa", function()
+    assert(not openssl.pkey.read("1"))
+  end)
+end)

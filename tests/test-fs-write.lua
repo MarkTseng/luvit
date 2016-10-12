@@ -1,6 +1,6 @@
 --[[
 
-Copyright 2012 The Luvit Authors. All Rights Reserved.
+Copyright 2015 The Luvit Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License")
 you may not use this file except in compliance with the License.
@@ -16,69 +16,54 @@ limitations under the License.
 
 --]]
 
-require("helper")
+require('tap')(function(test)
+  local FS = require('fs')
+  local Path = require('path')
 
-local FS = require('fs')
-local Path = require('path')
-local os = require('os')
-local string = require('string')
-
-local fn = Path.join(__dirname, 'tmp', 'write.txt')
-local fn2 = Path.join(__dirname, 'tmp', 'write2.txt')
-local expected = 'ümlaut.'
-local found, found2
-
-FS.open(fn, 'w', tonumber('0644', 8), function(err, fd)
-  if err then
-    return err
-  end
-  p('open done')
-  -- TODO: support same arguments as fs.write in node.js
-  FS.write(fd, 0, '', function(err, written)
-    assert(0 == written)
+  test('write1', function()
+    local fn = Path.join(module.dir, 'write.txt')
+    local expected = 'ümlaut.'
+    p(fn)
+    FS.open(fn, 'w', tonumber('0644', 8), function(err, fd)
+      assert(not err)
+      p('open done')
+      -- TODO: support same arguments as fs.write in node.js
+      FS.write(fd, 0, '', function(err, written)
+        assert(not err)
+        assert(0 == written)
+      end)
+      FS.write(fd, 0, expected, function(err, written)
+        p('write done')
+        assert(not err)
+        assert(#expected == written)
+        FS.closeSync(fd)
+        local found = FS.readFileSync(fn)
+        p(string.format('expected: "%s"', expected))
+        p(string.format('found: "%s"', found))
+        FS.unlinkSync(fn)
+      end)
+    end)
   end)
-  FS.write(fd, 0, expected, function(err, written)
-    p('write done')
-    if err then
-      return err
-    end
-    assert(#expected == written)
-    FS.closeSync(fd)
-    found = FS.readFileSync(fn)
-    p(string.format('expected: "%s"', expected))
-    p(string.format('found: "%s"', found))
-    FS.unlinkSync(fn)
+
+  test('write2', function()
+    local fn2 = Path.join(module.dir, 'write2.txt')
+    local expected = 'ümlaut.'
+    FS.open(fn2, 'w', tonumber('0644', 8), function(err, fd)
+      assert(not err)
+      p('open done')
+      FS.write(fd, 0, '', function(err, written)
+        assert(0 == written)
+      end)
+      FS.write(fd, 0, expected, function(err, written)
+        p('write done')
+        assert(not err)
+        assert(#expected == written)
+        FS.closeSync(fd)
+        local found2 = FS.readFileSync(fn2)
+        p(string.format('expected: "%s"', expected))
+        p(string.format('found: "%s"', found2))
+        FS.unlinkSync(fn2)
+      end)
+    end)
   end)
 end)
-
-
-FS.open(fn2, 'w', tonumber('0644', 8),
-  function(err, fd)
-    if err then
-      return err
-    end
-    p('open done')
-    FS.write(fd, 0, '', function(err, written)
-      assert(0 == written)
-    end)
-    FS.write(fd, 0, expected, function(err, written)
-      p('write done')
-      if err then
-        return err
-      end
-      assert(#expected == written)
-      FS.closeSync(fd)
-      found2 = FS.readFileSync(fn2)
-      p(string.format('expected: "%s"', expected))
-      p(string.format('found: "%s"', found2))
-      FS.unlinkSync(fn2)
-    end)
-  end
-)
-
-
-process:on('exit', function()
-  assert(expected == found)
-  assert(expected == found2)
-end)
-
